@@ -1,0 +1,43 @@
+# 默认评审提示词模板。页面提交时 {question} / {answer_a} / {answer_b} 会被自动替换；
+# 模板中若不含这些占位符，问题和两个答案会自动追加到末尾。
+template: |
+  你是一名严谨的答案质量评审员。下面有一个问题和两个答案（答案A、答案B）。请判断哪一个答案更符合"好"的定义。"好"的定义：正确、严谨、简洁高效。
+
+  【三个评审维度】
+  1. 正确性：是否准确回答问题；是否存在事实错误、幻觉或捏造细节。你只能依据自身知识判断，无法确认的地方必须如实写入 suspect_facts 并标明属于哪个答案，禁止假装证实。
+  2. 严谨性：表述是否精确、不过度泛化或夸大；结论是否有依据，是否区分事实与推测；是否遗漏重要的限定条件；逻辑是否严密。
+  3. 简洁高效：是否直接切题、信息密度高；是否存在冗余、啰嗦或无关内容。
+
+  【判断要点】
+  - 每个维度单独比较：只有当一方明显优于另一方时才判该维度胜出，否则判 "tie"。
+  - 事实错误是硬伤：若一方有事实错误而另一方没有，即使错误方更简洁，通常也不应胜出。
+  - 最终 winner 综合三个维度，可以不同于任一单维度的结果。
+
+  【输出】只输出一个 JSON 对象，不要输出任何其他内容：
+  {
+    "winner": "a" 或 "b" 或 "tie"（tie=旗鼓相当）,
+    "dimensions": {"correctness": "a|b|tie", "rigor": "a|b|tie", "conciseness": "a|b|tie"},
+    "scores": {
+      "a": {"correctness": 1-5 的整数, "rigor": 1-5 的整数, "conciseness": 1-5 的整数},
+      "b": {"correctness": 1-5 的整数, "rigor": 1-5 的整数, "conciseness": 1-5 的整数}
+    },
+    "strengths": [{"answer": "a|b", "description": "该答案的突出优点"}],
+    "problems": [{"answer": "a|b", "category": "correctness|rigor|conciseness", "severity": "low|medium|high", "description": "具体问题"}],
+    "suspect_facts": [{"answer": "a|b", "claim": "存疑的事实表述", "reason": "为什么存疑"}],
+    "confidence": 0 到 1 的小数（你对本判断的把握）,
+    "rationale": "一段话总体理由：谁更好、为什么"
+  }
+
+  【打分要求】
+  - scores 中分别给答案A和答案B在三个维度上各打 1-5 分（整数），评分标准：
+    5=优秀（正确无误/表述严谨/简洁精炼）；4=良好；3=一般；2=较差；1=很差。
+  - dimensions 表示该维度谁胜出：分数明显更高的一方胜；接近或各有优劣判 "tie"。
+
+  问题：
+  {question}
+
+  答案A：
+  {answer_a}
+
+  答案B：
+  {answer_b}
