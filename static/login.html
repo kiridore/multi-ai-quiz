@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>登录 - 答案质量评审台</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f5f6f8; color: #1f2328; }
+  .card { background: #fff; border: 1px solid #d0d7de; border-radius: 12px; padding: 32px 28px; width: 320px; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  p { color: #57606a; font-size: 13px; margin: 0 0 18px; }
+  input { width: 100%; font: inherit; padding: 9px 12px; border: 1px solid #d0d7de; border-radius: 8px; margin-bottom: 12px; background: #fff; }
+  button { width: 100%; font: inherit; font-weight: 600; padding: 9px 0; border: none; border-radius: 8px; background: #1f6feb; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .err { color: #cf222e; font-size: 13px; min-height: 18px; margin-top: 10px; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #0d1117; color: #e6edf3; }
+    .card { background: #161b22; border-color: #30363d; }
+    input { background: #0d1117; color: #e6edf3; border-color: #30363d; }
+    p { color: #8b949e; }
+    .err { color: #f85149; }
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>答案质量评审台</h1>
+    <p>请输入访问密钥</p>
+    <input id="key" type="password" placeholder="访问密钥" autofocus>
+    <button id="btn" type="button">进入</button>
+    <div class="err" id="err"></div>
+  </div>
+<script>
+const $ = (id) => document.getElementById(id);
+async function submit() {
+  const btn = $('btn');
+  btn.disabled = true;
+  $('err').textContent = '';
+  try {
+    const resp = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: $('key').value }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (resp.ok) { window.location.href = '/'; return; }
+    $('err').textContent = data.detail || '登录失败';
+  } catch (e) {
+    $('err').textContent = '网络错误: ' + e;
+  } finally {
+    btn.disabled = false;
+  }
+}
+$('btn').onclick = submit;
+$('key').addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+</script>
+</body>
+</html>

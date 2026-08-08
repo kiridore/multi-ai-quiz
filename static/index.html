@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>答案质量评审台</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; background: #f5f6f8; color: #1f2328; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 60px; }
+  header h1 { font-size: 20px; margin: 0 0 4px; }
+  header p { color: #57606a; margin: 0 0 20px; font-size: 13px; }
+  .panel { background: #fff; border: 1px solid #d0d7de; border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 10px 0 6px; }
+  textarea { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid #d0d7de; border-radius: 8px; resize: vertical; background: #fff; }
+  #question, #answer_a, #answer_b { min-height: 72px; }
+  .answers { display: flex; gap: 12px; }
+  .answer-col { flex: 1; min-width: 0; }
+  @media (max-width: 720px) {
+    .answers { flex-direction: column; }
+  }
+  #prompt { min-height: 160px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.5; }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; font-size: 13px; color: #57606a; }
+  .hist-table { width: 100%; border-collapse: collapse; margin: 10px 0 2px; font-size: 13px; }
+  .hist-table th { text-align: left; font-size: 12px; font-weight: 600; color: #57606a; padding: 6px 10px; border-bottom: 1px solid #d0d7de; }
+  .hist-table td { padding: 5px 10px; border-bottom: 1px solid #eaeef2; vertical-align: top; }
+  .models-header { display: flex; align-items: center; gap: 8px; margin: 14px 0 4px; font-size: 13px; font-weight: 600; }
+  #models-toggle { font: inherit; font-size: 12px; font-weight: 400; padding: 2px 10px; border: 1px solid #d0d7de; border-radius: 6px; background: #fff; color: #57606a; cursor: pointer; }
+  #models-toggle:hover { background: #f6f8fa; }
+  .providers { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px 10px; margin: 4px 0 2px; }
+  .provider-col { display: flex; flex-direction: column; gap: 4px; }
+  .provider-name { font-size: 11px; font-weight: 700; color: #57606a; letter-spacing: .03em; }
+  .provider-col label { display: inline-flex; align-items: center; gap: 5px; font-weight: 400; font-size: 12px; border: 1px solid #d0d7de; padding: 2px 10px; border-radius: 999px; cursor: pointer; width: fit-content; background: #f6f8fa; }
+  .provider-col label.ok { border-color: #1a7f37; background: #dafbe1; }
+  .provider-col label.bad { border-color: #cf222e; background: #ffebe9; }
+  .providers.collapsed { display: none; }
+  .hist-table td.q { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hist-table td:last-child { white-space: nowrap; }
+  .hist-table button { font: inherit; font-size: 12px; padding: 2px 10px; border: 1px solid #d0d7de; border-radius: 6px; background: #fff; color: #1f2328; cursor: pointer; margin-right: 4px; }
+  .hist-table button:hover { background: #f6f8fa; }
+  .nav { display: flex; gap: 6px; margin-bottom: 16px; }
+  .nav button { font: inherit; font-size: 13px; font-weight: 600; padding: 6px 18px; border: 1px solid #d0d7de; border-radius: 8px; background: #fff; color: #57606a; cursor: pointer; }
+  .nav button.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  #hist-toolbar { margin-bottom: 10px; }
+  #hist-back, #hist-more { font: inherit; font-size: 13px; padding: 5px 14px; border: 1px solid #d0d7de; border-radius: 8px; background: #fff; color: #1f2328; cursor: pointer; }
+  #hist-back:hover, #hist-more:hover { background: #f6f8fa; }
+  #hist-more { margin-top: 10px; }
+  #hist-empty { color: #57606a; font-size: 13px; padding: 14px 0; }
+  .tabs:empty { display: none; }
+  .tabpanels:empty { display: none; }
+  .actions { display: flex; gap: 10px; margin-top: 14px; align-items: center; }
+  #submit { background: #1f6feb; color: #fff; border: none; padding: 9px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+  #submit:disabled, #check:disabled { opacity: .5; cursor: not-allowed; }
+  #check { background: #fff; border: 1px solid #d0d7de; color: #1f2328; padding: 9px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+  #check:hover { background: #f6f8fa; }
+
+  /* tabs */
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid #d0d7de; }
+  .tab { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: 1px solid transparent; border-bottom: none; border-radius: 8px 8px 0 0; background: transparent; cursor: pointer; font-size: 13px; color: #57606a; font-family: inherit; }
+  .tab:hover { background: #f6f8fa; }
+  .tab.active { border-color: #d0d7de; background: #fff; color: #1f2328; font-weight: 600; margin-bottom: -1px; }
+  .tab .badge { font-size: 10px; padding: 1px 7px; }
+  .tabpanel { display: none; background: #fff; border: 1px solid #d0d7de; border-top: none; border-radius: 0 0 10px 10px; padding: 20px; }
+  .tabpanel.active { display: block; }
+  .qa { white-space: pre-wrap; word-break: break-word; font-size: 14px; line-height: 1.7; background: #f6f8fa; border: 1px solid #eaeef2; border-radius: 8px; padding: 12px 14px; margin-top: 4px; }
+  .verdict-line { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .verdict-line .badge { font-size: 13px; padding: 3px 12px; }
+
+  .badge { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+  .pill.green { background: #dafbe1; color: #1a7f37; }
+  .pill.amber { background: #fff8c5; color: #9a6700; }
+  .pill.red { background: #ffebe9; color: #cf222e; }
+  .dims { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 4px; }
+  .score-table { width: 100%; max-width: 460px; border-collapse: collapse; margin: 4px 0 8px; font-size: 13px; }
+  .score-table th { text-align: left; font-size: 12px; font-weight: 600; color: #57606a; padding: 4px 10px; border-bottom: 1px solid #d0d7de; }
+  .score-table td { padding: 4px 10px; border-bottom: 1px solid #eaeef2; }
+  .score-table td:nth-child(2), .score-table td:nth-child(3) { text-align: center; }
+  .score-table td:last-child { text-align: center; }
+  .dim { font-size: 13px; color: #57606a; }
+  .chip { display: inline-block; min-width: 20px; text-align: center; font-size: 12px; font-weight: 700; border-radius: 6px; padding: 1px 7px; margin-left: 6px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 6px; margin-right: 4px; }
+  .tag-a { background: #ddf4ff; color: #0969da; }
+  .tag-b { background: #fbefff; color: #8250df; }
+  .tie { background: #eaeef2; color: #57606a; }
+  h3 { font-size: 12px; text-transform: uppercase; color: #57606a; margin: 14px 0 6px; letter-spacing: .04em; }
+  ul { margin: 0; padding-left: 18px; font-size: 13px; }
+  li { margin-bottom: 5px; }
+  .sev { font-weight: 700; }
+  .cat { color: #57606a; }
+  .rationale { font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+  .meta { font-size: 12px; color: #57606a; }
+  details pre { font-size: 12px; white-space: pre-wrap; word-break: break-word; background: #f6f8fa; padding: 8px; border-radius: 8px; margin: 4px 0 0; }
+  .retry { margin-top: 10px; background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 4px 16px; cursor: pointer; font-size: 13px; }
+  .retry:hover { background: #f6f8fa; }
+  .loading { font-size: 13px; color: #57606a; }
+  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #d0d7de; border-top-color: #1f6feb; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-msg { color: #cf222e; font-size: 13px; white-space: pre-wrap; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #0d1117; color: #e6edf3; }
+    .panel, .tabpanel, .tab.active { background: #161b22; border-color: #30363d; }
+    textarea { background: #0d1117; color: #e6edf3; border-color: #30363d; }
+    .hist-table th { color: #8b949e; border-bottom-color: #30363d; }
+    .hist-table td { border-bottom-color: #30363d; }
+    .score-table th { color: #8b949e; border-bottom-color: #30363d; }
+    .score-table td { border-bottom-color: #30363d; }
+    .nav button { background: #21262d; border-color: #30363d; color: #8b949e; }
+    .nav button.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+    .hist-table button, #hist-back, #hist-more { background: #21262d; border-color: #30363d; color: #e6edf3; }
+    .hist-table button:hover, #hist-back:hover, #hist-more:hover { background: #30363d; }
+    #hist-empty { color: #8b949e; }
+    .provider-col label { background: #21262d; border-color: #30363d; }
+    .provider-col label.ok { border-color: #3fb950; background: #12261a; }
+    .provider-col label.bad { border-color: #f85149; background: #39251e; }
+    .provider-name { color: #8b949e; }
+    #models-toggle { background: #21262d; border-color: #30363d; color: #8b949e; }
+    #models-toggle:hover { background: #30363d; }
+    #check { background: #21262d; border-color: #30363d; color: #e6edf3; }
+    #check:hover { background: #30363d; }
+    .tab { color: #8b949e; }
+    .tab:hover { background: #30363d; }
+    .tab.active { color: #e6edf3; }
+    .tabs { border-bottom-color: #30363d; }
+    .qa, details pre { background: #0d1117; border-color: #30363d; }
+    .loading, .meta, .cat, .dim, summary, header p { color: #8b949e; }
+    .retry { background: #21262d; border-color: #30363d; color: #e6edf3; }
+    .retry:hover { background: #30363d; }
+    .pill.green { background: #12261a; color: #3fb950; }
+    .pill.amber { background: #2d2418; color: #d29922; }
+    .pill.red { background: #39251e; color: #f85149; }
+    .green { color: #3fb950 !important; }
+    .amber { color: #d29922 !important; }
+    .red { color: #f85149 !important; }
+    .tag-a { background: #11253d; color: #58a6ff; }
+    .tag-b { background: #2b1b3d; color: #bc8cff; }
+    .tie { background: #21262d; color: #8b949e; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>答案质量评审台</h1>
+    <p>同一份「问题 + 两个答案」并行发给多个模型评审，判断哪个答案更优。</p>
+  </header>
+
+  <nav class="nav">
+    <button id="nav-eval" class="active" type="button">评审</button>
+    <button id="nav-history" type="button">历史记录</button>
+  </nav>
+
+  <section id="view-eval">
+    <div class="panel">
+      <label for="question">问题</label>
+      <textarea id="question" placeholder="粘贴问题…"></textarea>
+      <div class="answers">
+        <div class="answer-col">
+          <label for="answer_a">答案 A</label>
+          <textarea id="answer_a" placeholder="粘贴第一个答案…"></textarea>
+        </div>
+        <div class="answer-col">
+          <label for="answer_b">答案 B</label>
+          <textarea id="answer_b" placeholder="粘贴第二个答案…"></textarea>
+        </div>
+      </div>
+      <details>
+        <summary>评审提示词（{question} / {answer_a} / {answer_b} 占位符会自动替换；无占位符时自动追加到末尾）</summary>
+        <textarea id="prompt" spellcheck="false"></textarea>
+      </details>
+      <div class="models-header">模型列表
+        <button id="models-toggle" type="button">折叠</button>
+      </div>
+      <div class="providers" id="models"></div>
+      <div class="actions">
+        <button id="submit">开始评审</button>
+        <button id="check">检测模型可用性</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-history" hidden>
+    <div id="hist-toolbar"><button id="hist-back" type="button" hidden>← 返回列表</button></div>
+    <table class="hist-table" id="hist-table">
+      <thead>
+        <tr><th>时间</th><th>问题</th><th>模型</th><th>判定分布</th><th>操作</th></tr>
+      </thead>
+      <tbody id="hist-body"></tbody>
+    </table>
+    <div id="hist-empty" hidden>暂无记录</div>
+    <button id="hist-more" type="button" hidden>加载更多</button>
+  </section>
+
+  <div class="tabs" id="tabs"></div>
+  <div class="tabpanels" id="panels"></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const tabsEl = $('tabs');
+const panelsEl = $('panels');
+const CAT_LABELS = { correctness: '正确性', rigor: '严谨性', conciseness: '简洁' };
+function scoreClass(v) { return v >= 4 ? 'green' : v === 3 ? 'amber' : 'red'; }
+const WIN_META = { a: ['A 更优', 'tag-a'], b: ['B 更优', 'tag-b'], tie: ['平局', 'tie'] };
+let modelNames = {};
+let tabState = {};
+
+// 会话失效时跳转登录页
+const _origFetch = window.fetch.bind(window);
+window.fetch = (url, opts) => _origFetch(url, opts).then((res) => {
+  if (res.status === 401 && !String(url).includes('/api/login')) {
+    window.location.href = '/login';
+  }
+  return res;
+});
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function addTab(label, pending) {
+  const tab = document.createElement('button');
+  tab.type = 'button';
+  tab.className = 'tab';
+  tab.innerHTML = escapeHtml(label) + (pending ? ' <span class="spinner"></span>' : '');
+  const panel = document.createElement('div');
+  panel.className = 'tabpanel';
+  const setBadge = (html) => { tab.innerHTML = escapeHtml(label) + ' ' + html; };
+  const setContent = (html) => { panel.innerHTML = html; };
+  const activate = () => {
+    for (const t of tabsEl.children) t.classList.remove('active');
+    for (const p of panelsEl.children) p.classList.remove('active');
+    tab.classList.add('active');
+    panel.classList.add('active');
+  };
+  tab.addEventListener('click', activate);
+  tabsEl.appendChild(tab);
+  panelsEl.appendChild(panel);
+  if (pending) setContent('<div class="loading"><span class="spinner"></span>评判中…</div>');
+  return { tab, panel, setBadge, setContent, activate };
+}
+
+async function loadMeta() {
+  const [models, prompt] = await Promise.all([
+    fetch('/api/models').then(r => r.json()),
+    fetch('/api/prompt').then(r => r.json()),
+  ]);
+  $('prompt').value = prompt.template;
+  const box = $('models');
+  box.innerHTML = '';
+  box.classList.remove('collapsed');
+  $('models-toggle').textContent = '折叠';
+  modelNames = {};
+  const groups = new Map();
+  for (const m of models) {
+    modelNames[m.id] = m.name;
+    const provider = m.provider || '其他';
+    if (!groups.has(provider)) groups.set(provider, []);
+    groups.get(provider).push(m);
+  }
+  for (const [provider, ms] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0], 'zh'))) {
+    const col = document.createElement('div');
+    col.className = 'provider-col';
+    const name = document.createElement('div');
+    name.className = 'provider-name';
+    name.textContent = provider;
+    col.appendChild(name);
+    for (const m of ms) {
+      const label = document.createElement('label');
+      label.innerHTML = `<input type="checkbox" value="${escapeHtml(m.id)}" ${m.enabled ? 'checked' : ''}> ${escapeHtml(m.name)}`;
+      col.appendChild(label);
+    }
+    box.appendChild(col);
+  }
+}
+
+function renderResult(modelId, data) {
+  const t = tabState[modelId];
+  if (!t) return;
+  const r = data.result;
+  if (r && typeof r.winner === 'string') {
+    const [wLabel, wClass] = WIN_META[r.winner] || [r.winner, 'tie'];
+    t.setBadge(`<span class="badge pill ${wClass}">${escapeHtml(wLabel)}</span>`);
+    const dims = r.dimensions || {};
+    const scores = r.scores || {};
+    const dimVal = (k) => ({ a: 'A', b: 'B', tie: '平' }[dims[k]] ?? '—');
+    const dimCls = (k) => (dims[k] === 'a' ? 'tag-a' : dims[k] === 'b' ? 'tag-b' : 'tie');
+    const dimKeys = ['correctness', 'rigor', 'conciseness'];
+    const dimLabels = { correctness: '正确性', rigor: '严谨性', conciseness: '简洁' };
+    const scoreCell = (side, k) => {
+      const v = scores[side] && scores[side][k];
+      return typeof v === 'number' ? `<b class="${scoreClass(v)}">${v}</b>/5` : '—';
+    };
+    const ansTag = (ans) => (ans === 'a' ? '<span class="tag tag-a">A</span>' : ans === 'b' ? '<span class="tag tag-b">B</span>' : '');
+    t.setContent(`
+      <div class="verdict-line">
+        <span class="badge pill ${wClass}">${escapeHtml(wLabel)}</span>
+        <span class="meta">置信度 ${typeof r.confidence === 'number' ? Math.round(r.confidence * 100) + '%' : '—'}</span>
+      </div>
+      <table class="score-table">
+        <thead><tr><th>维度</th><th>答案 A</th><th>答案 B</th><th>胜者</th></tr></thead>
+        <tbody>${dimKeys.map(k => `
+          <tr>
+            <td>${dimLabels[k]}</td>
+            <td>${scoreCell('a', k)}</td>
+            <td>${scoreCell('b', k)}</td>
+            <td><span class="chip ${dimCls(k)}">${dimVal(k)}</span></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      ${(r.strengths && r.strengths.length) ? `<h3>优势</h3><ul>${r.strengths.map(s =>
+        `<li>${ansTag(s.answer)}${escapeHtml(s.description)}</li>`).join('')}</ul>` : ''}
+      ${(r.problems && r.problems.length) ? `<h3>问题</h3><ul>${r.problems.map(p =>
+        `<li>${ansTag(p.answer)}<span class="sev ${p.severity === 'high' ? 'red' : p.severity === 'medium' ? 'amber' : 'green'}">[${escapeHtml(p.severity)}]</span> <span class="cat">${escapeHtml(CAT_LABELS[p.category] || p.category)}</span> ${escapeHtml(p.description)}</li>`).join('')}</ul>` : ''}
+      ${(r.suspect_facts && r.suspect_facts.length) ? `<h3>存疑事实</h3><ul>${r.suspect_facts.map(f =>
+        `<li>${ansTag(f.answer)}${escapeHtml(f.claim)}${f.reason ? `<br><span class="cat">${escapeHtml(f.reason)}</span>` : ''}</li>`).join('')}</ul>` : ''}
+      ${r.rationale ? `<h3>理由</h3><div class="rationale">${escapeHtml(r.rationale)}</div>` : ''}
+      <details><summary>原始输出</summary><pre>${escapeHtml(data.raw)}</pre></details>`);
+  } else {
+    t.setBadge('<span class="badge pill tie">非结构化</span>');
+    t.setContent(`<div class="rationale">${escapeHtml(data.raw)}</div>`);
+  }
+}
+
+function renderError(modelId, data) {
+  const t = tabState[modelId];
+  if (!t) return;
+  t.setBadge('<span class="badge pill red">失败</span>');
+  t.setContent(`<div class="error-msg">${escapeHtml(data.error)}</div>
+    <button class="retry">重试</button>`);
+  t.panel.querySelector('.retry').onclick = () => retryOne(modelId);
+}
+
+function retryOne(modelId) {
+  const t = tabState[modelId];
+  if (!t) return;
+  t.setBadge('<span class="spinner"></span>');
+  t.setContent('<div class="loading"><span class="spinner"></span>重试中…</div>');
+  const body = { question: $('question').value, answer_a: $('answer_a').value, answer_b: $('answer_b').value, models: [modelId], prompt: $('prompt').value };
+  fetch('/api/evaluate/one', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    .then(r => r.json())
+    .then(d => d.ok ? renderResult(modelId, d) : renderError(modelId, d))
+    .catch(e => renderError(modelId, { error: String(e) }));
+}
+
+$('check').onclick = async () => {
+  const btn = $('check');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>检测中…';
+  const labels = [...document.querySelectorAll('#models label')];
+  const byId = new Map(labels.map((l) => [l.querySelector('input').value, l]));
+  for (const label of labels) {
+    label.classList.remove('ok', 'bad');
+    label.removeAttribute('title');
+  }
+  try {
+    const resp = await fetch('/api/check', { method: 'POST' });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || resp.statusText);
+    }
+    const { results } = await resp.json();
+    let okN = 0, badN = 0;
+    for (const r of results) {
+      const label = byId.get(r.model);
+      if (!label) continue;
+      if (r.ok) { label.classList.add('ok'); okN++; }
+      else { label.classList.add('bad'); label.title = r.error || '不可用'; badN++; }
+    }
+    btn.textContent = `可用 ${okN} / 不可用 ${badN}`;
+  } catch (e) {
+    btn.textContent = '检测模型可用性';
+    alert('检测失败: ' + e);
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+$('submit').onclick = async () => {
+  const question = $('question').value.trim();
+  const answerA = $('answer_a').value.trim();
+  const answerB = $('answer_b').value.trim();
+  if (!question || !answerA || !answerB) { alert('请填写问题与两个答案'); return; }
+  const selected = [...document.querySelectorAll('#models input:checked')].map(i => i.value);
+  if (!selected.length) { alert('请至少选择一个模型'); return; }
+
+  tabsEl.innerHTML = '';
+  panelsEl.innerHTML = '';
+  tabState = {};
+
+  const qa = addTab('问题与答案', false);
+  qa.setContent(`<h3>问题</h3><div class="qa">${escapeHtml(question)}</div>
+    <h3>答案 A</h3><div class="qa">${escapeHtml(answerA)}</div>
+    <h3>答案 B</h3><div class="qa">${escapeHtml(answerB)}</div>`);
+  for (const m of selected) tabState[m] = addTab(modelNames[m] || m, true);
+  tabState[selected[0]].activate();
+
+  const body = { question, answer_a: answerA, answer_b: answerB, models: selected, prompt: $('prompt').value };
+  $('submit').disabled = true;
+  try {
+    const resp = await fetch('/api/evaluate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || resp.statusText);
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) !== -1) {
+        const event = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        for (const line of event.split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          const data = JSON.parse(line.slice(6));
+          if (data.ok) renderResult(data.model, data); else renderError(data.model, data);
+        }
+      }
+    }
+  } catch (e) {
+    for (const m of selected) {
+      const t = tabState[m];
+      if (t && t.panel.querySelector('.loading')) renderError(m, { error: String(e) });
+    }
+  } finally {
+    $('submit').disabled = false;
+  }
+};
+
+// ---- 历史记录 ----
+const histBody = $('hist-body');
+let histOffset = 0;
+
+function showView(name) {
+  $('nav-eval').classList.toggle('active', name === 'eval');
+  $('nav-history').classList.toggle('active', name === 'history');
+  $('view-eval').hidden = name !== 'eval';
+  $('view-history').hidden = name !== 'history';
+  if (name === 'history') loadHistory(0);
+}
+
+function loadHistory(offset) {
+  fetch('/api/history?limit=20&offset=' + offset)
+    .then(r => r.json())
+    .then(({ items, total }) => {
+      if (offset === 0) { histBody.innerHTML = ''; histOffset = 0; }
+      histOffset += items.length;
+      for (const it of items) histBody.appendChild(historyRow(it));
+      $('hist-empty').hidden = total !== 0;
+      $('hist-more').hidden = histOffset >= total;
+    })
+    .catch(e => alert('加载历史失败: ' + e));
+}
+
+function historyRow(it) {
+  const tr = document.createElement('tr');
+  const w = it.winners || {};
+  const parts = [];
+  if (w.a) parts.push('A×' + w.a);
+  if (w.b) parts.push('B×' + w.b);
+  if (w.tie) parts.push('平×' + w.tie);
+  if (w.fail) parts.push('失败×' + w.fail);
+  if (w.other) parts.push('其他×' + w.other);
+  const q = it.question.length > 60 ? it.question.slice(0, 60) + '…' : it.question;
+  tr.innerHTML = `<td>${escapeHtml(it.created_at)}</td>
+    <td class="q" title="${escapeHtml(it.question)}">${escapeHtml(q)}</td>
+    <td>${it.models.length} 个</td>
+    <td>${parts.length ? parts.join(' · ') : '—'}</td>
+    <td><button type="button" class="view">查看</button><button type="button" class="del">删除</button></td>`;
+  tr.querySelector('.view').onclick = () => viewRecord(it.id);
+  tr.querySelector('.del').onclick = () => deleteRecord(it.id, tr);
+  return tr;
+}
+
+async function viewRecord(id) {
+  let rec;
+  try {
+    rec = await fetch('/api/history/' + id).then(r => { if (!r.ok) throw new Error('记录不存在'); return r.json(); });
+  } catch (e) { alert(e); return; }
+  $('hist-back').hidden = false;
+  $('hist-table').hidden = true;
+  $('hist-more').hidden = true;
+  $('hist-empty').hidden = true;
+  tabsEl.innerHTML = '';
+  panelsEl.innerHTML = '';
+  tabState = {};
+  const qa = addTab('问题与答案', false);
+  qa.setContent(`<h3>问题</h3><div class="qa">${escapeHtml(rec.question)}</div>
+    <h3>答案 A</h3><div class="qa">${escapeHtml(rec.answer_a)}</div>
+    <h3>答案 B</h3><div class="qa">${escapeHtml(rec.answer_b)}</div>
+    <details><summary>使用的提示词</summary><pre>${escapeHtml(rec.prompt)}</pre></details>`);
+  let first = null;
+  for (const res of rec.results) {
+    if (!first) first = res.model;
+    tabState[res.model] = addTab(modelNames[res.model] || res.model, false);
+    if (res.ok) renderResult(res.model, res); else renderError(res.model, res);
+  }
+  if (first) tabState[first].activate();
+}
+
+function backToList() {
+  $('hist-back').hidden = true;
+  $('hist-table').hidden = false;
+  $('hist-more').hidden = false;
+  $('hist-empty').hidden = false;
+  tabsEl.innerHTML = '';
+  panelsEl.innerHTML = '';
+  tabState = {};
+  loadHistory(0);
+}
+
+function deleteRecord(id, tr) {
+  if (!confirm('确定删除该记录？')) return;
+  fetch('/api/history/' + id, { method: 'DELETE' })
+    .then(r => { if (!r.ok) throw new Error('删除失败'); tr.remove(); if (!histBody.children.length) $('hist-empty').hidden = false; })
+    .catch(e => alert(e));
+}
+
+$('models-toggle').onclick = () => {
+  const box = $('models');
+  const collapsed = box.classList.toggle('collapsed');
+  $('models-toggle').textContent = collapsed ? '展开' : '折叠';
+};
+
+$('nav-eval').onclick = () => showView('eval');
+$('nav-history').onclick = () => showView('history');
+$('hist-back').onclick = backToList;
+$('hist-more').onclick = () => loadHistory(histOffset);
+
+loadMeta();
+</script>
+</body>
+</html>
