@@ -308,25 +308,23 @@ async function loadMeta() {
   }
 }
 
-function renderResult(modelId, data) {
-  const t = tabState[modelId];
-  if (!t) return;
-  const r = data.result;
-  if (r && typeof r.winner === 'string') {
-    const [wLabel, wClass] = WIN_META[r.winner] || [r.winner, 'tie'];
-    t.setBadge(`<span class="badge pill ${wClass}">${escapeHtml(wLabel)}</span>`);
-    const dims = r.dimensions || {};
-    const scores = r.scores || {};
-    const dimVal = (k) => ({ a: 'A', b: 'B', tie: '平' }[dims[k]] ?? '—');
-    const dimCls = (k) => (dims[k] === 'a' ? 'tag-a' : dims[k] === 'b' ? 'tag-b' : 'tie');
-    const dimKeys = ['correctness', 'rigor', 'conciseness'];
-    const dimLabels = { correctness: '正确性', rigor: '严谨性', conciseness: '简洁' };
-    const scoreCell = (side, k) => {
-      const v = scores[side] && scores[side][k];
-      return typeof v === 'number' ? `<b class="${scoreClass(v)}">${v}</b>/5` : '—';
-    };
-    const ansTag = (ans) => (ans === 'a' ? '<span class="tag tag-a">A</span>' : ans === 'b' ? '<span class="tag tag-b">B</span>' : '');
-    t.setContent(`
+function verdictClass(winner) { return (WIN_META[winner] || [null, 'tie'])[1]; }
+function verdictLabel(winner) { return (WIN_META[winner] || [winner, 'tie'])[0]; }
+
+function verdictHtml(r, raw) {
+  const dims = r.dimensions || {};
+  const scores = r.scores || {};
+  const dimVal = (k) => ({ a: 'A', b: 'B', tie: '平' }[dims[k]] ?? '—');
+  const dimCls = (k) => (dims[k] === 'a' ? 'tag-a' : dims[k] === 'b' ? 'tag-b' : 'tie');
+  const dimKeys = ['correctness', 'rigor', 'conciseness'];
+  const dimLabels = { correctness: '正确性', rigor: '严谨性', conciseness: '简洁' };
+  const scoreCell = (side, k) => {
+    const v = scores[side] && scores[side][k];
+    return typeof v === 'number' ? `<b class="${scoreClass(v)}">${v}</b>/5` : '—';
+  };
+  const ansTag = (ans) => (ans === 'a' ? '<span class="tag tag-a">A</span>' : ans === 'b' ? '<span class="tag tag-b">B</span>' : '');
+  const [wLabel, wClass] = WIN_META[r.winner] || [r.winner, 'tie'];
+  return `
       <div class="verdict-line">
         <span class="badge pill ${wClass}">${escapeHtml(wLabel)}</span>
         <span class="meta">置信度 ${typeof r.confidence === 'number' ? Math.round(r.confidence * 100) + '%' : '—'}</span>
@@ -349,7 +347,16 @@ function renderResult(modelId, data) {
       ${(r.suspect_facts && r.suspect_facts.length) ? `<h3>存疑事实</h3><ul>${r.suspect_facts.map(f =>
         `<li>${ansTag(f.answer)}${escapeHtml(f.claim)}${f.reason ? `<br><span class="cat">${escapeHtml(f.reason)}</span>` : ''}</li>`).join('')}</ul>` : ''}
       ${r.rationale ? `<h3>理由</h3><div class="rationale">${escapeHtml(r.rationale)}</div>` : ''}
-      <details><summary>原始输出</summary><pre>${escapeHtml(data.raw)}</pre></details>`);
+      <details><summary>原始输出</summary><pre>${escapeHtml(raw)}</pre></details>`;
+}
+
+function renderResult(modelId, data) {
+  const t = tabState[modelId];
+  if (!t) return;
+  const r = data.result;
+  if (r && typeof r.winner === 'string') {
+    t.setBadge(`<span class="badge pill ${verdictClass(r.winner)}">${escapeHtml(verdictLabel(r.winner))}</span>`);
+    t.setContent(verdictHtml(r, data.raw));
   } else {
     t.setBadge('<span class="badge pill tie">非结构化</span>');
     t.setContent(`<div class="rationale">${escapeHtml(data.raw)}</div>`);
@@ -380,7 +387,11 @@ function followupArea(modelId, existing) {
     q.textContent = '追问：' + f.question;
     const a = document.createElement('div');
     a.className = 'followup-a';
-    a.textContent = '回答：' + f.answer;
+    if (f.result && typeof f.result.winner === 'string') {
+      a.innerHTML = verdictHtml(f.result, f.answer);
+    } else {
+      a.textContent = '回答：' + f.answer;
+    }
     item.append(q, a);
     list.appendChild(item);
   }
@@ -424,7 +435,11 @@ async function askFollowup(modelId, input, btn, list) {
     });
     const d = await resp.json();
     if (d.ok) {
-      a.textContent = '回答：' + d.answer;
+      if (d.result && typeof d.result.winner === 'string') {
+        a.innerHTML = verdictHtml(d.result, d.answer);
+      } else {
+        a.textContent = '回答：' + d.answer;
+      }
       input.value = '';
     } else {
       a.innerHTML = '<span class="error-msg">' + escapeHtml(d.error || '追问失败') + '</span>';

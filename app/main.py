@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .config import ACCESS_KEY, BASE_DIR, SESSION_TOKEN, config
-from .gateway import evaluate_one, family_for, fetch_live_models, fill_prompt, probe_model, provider_for
+from .gateway import evaluate_one, family_for, fetch_live_models, fill_prompt, parse_json, probe_model, provider_for
 from .history import add_evaluation, add_followup, delete_evaluation, get_evaluation, init_db, list_evaluations
 
 app = FastAPI(title="multi-ai-quiz")
@@ -219,8 +219,9 @@ async def followup(body: FollowupRequest):
     resp = await evaluate_one(body.model_id, prompt, item.get("api"), None, body.timeout)
     if not resp.get("ok"):
         return {"ok": False, "error": resp.get("error", "调用失败")}
-    add_followup(body.eval_id, body.model_id, question, resp["raw"])
-    return {"ok": True, "answer": resp["raw"]}
+    result = parse_json(resp["raw"])
+    add_followup(body.eval_id, body.model_id, question, resp["raw"], result)
+    return {"ok": True, "answer": resp["raw"], "result": result}
 
 
 @app.get("/api/history")

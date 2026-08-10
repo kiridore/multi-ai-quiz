@@ -120,7 +120,7 @@ def delete_evaluation(eval_id: int) -> bool:
         return cur.rowcount > 0
 
 
-def add_followup(eval_id: int, model_id: str, question: str, answer: str) -> bool:
+def add_followup(eval_id: int, model_id: str, question: str, answer: str, result: dict | None = None) -> bool:
     """Append a follow-up Q&A to one model's result. Returns False if the record/model is not found."""
     with closing(get_db()) as conn, conn:
         row = conn.execute("SELECT results FROM evaluations WHERE id = ?", (eval_id,)).fetchone()
@@ -134,6 +134,7 @@ def add_followup(eval_id: int, model_id: str, question: str, answer: str) -> boo
                     {
                         "question": question,
                         "answer": answer,
+                        "result": result,
                         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     }
                 )
