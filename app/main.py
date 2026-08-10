@@ -74,7 +74,7 @@ async def all_models() -> list[dict]:
 
     def from_yaml() -> list[dict]:
         return [
-            {"id": m["id"], "name": m.get("name", m["id"]), "enabled": m.get("enabled", True), "api": m.get("api", family_for(m["id"])), "temperature": m.get("temperature"), "provider": m.get("provider", provider_for(m["id"]))}
+            {"id": m["id"], "name": m.get("name", m["id"]), "enabled": m.get("enabled", True), "api": m.get("api", family_for(m["id"])), "temperature": m.get("temperature"), "provider": m.get("provider", provider_for(m["id"])), "price": m.get("price")}
             for m in config.models
         ]
 
@@ -91,6 +91,7 @@ async def all_models() -> list[dict]:
                 "api": by_id.get(item["id"], {}).get("api", family_for(item["id"])),
                 "temperature": by_id.get(item["id"], {}).get("temperature"),
                 "provider": by_id.get(item["id"], {}).get("provider", provider_for(item["id"])),
+                "price": by_id.get(item["id"], {}).get("price"),
             }
             for item in live
         ]
