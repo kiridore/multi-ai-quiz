@@ -8,6 +8,7 @@ Protocol families (per https://opencode.ai/docs/zh-cn/go):
 import asyncio
 import json
 import re
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -49,15 +50,25 @@ def family_for(model_id: str) -> str:
     return "chat"
 
 
+def _now_text() -> str:
+    return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+
+
 def fill_prompt(template: str, question: str, answer_a: str, answer_b: str) -> str:
-    """Replace {question}/{answer_a}/{answer_b} placeholders; append Q&A at the end if absent."""
+    """Replace {now}/{question}/{answer_a}/{answer_b} placeholders; append Q&A at the end if absent."""
+    now = _now_text()
+    has_now = "{now}" in template
+    template = template.replace("{now}", now)
     if any(p in template for p in ("{question}", "{answer_a}", "{answer_b}")):
         return (
             template.replace("{question}", question)
             .replace("{answer_a}", answer_a)
             .replace("{answer_b}", answer_b)
         )
-    return f"{template}\n\n问题：\n{question}\n\n答案A：\n{answer_a}\n\n答案B：\n{answer_b}"
+    suffix = f"\n\n问题：\n{question}\n\n答案A：\n{answer_a}\n\n答案B：\n{answer_b}"
+    if not has_now:
+        suffix = f"\n\n当前时间：{now}" + suffix
+    return template + suffix
 
 
 def parse_json(content: str) -> dict | None:
