@@ -97,6 +97,15 @@
   details pre { font-size: 12px; white-space: pre-wrap; word-break: break-word; background: #f6f8fa; padding: 8px; border-radius: 8px; margin: 4px 0 0; }
   .retry { margin-top: 10px; background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 4px 16px; cursor: pointer; font-size: 13px; }
   .retry:hover { background: #f6f8fa; }
+  .followup { margin-top: 12px; border-top: 1px solid #d0d7de; padding-top: 10px; }
+  .followup-item { margin-bottom: 10px; }
+  .followup-q { font-size: 13px; font-weight: 600; }
+  .followup-a { font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; color: #1f2328; margin-top: 2px; }
+  .followup-form { display: flex; gap: 8px; margin-top: 8px; }
+  .followup-form input { flex: 1; font: inherit; font-size: 13px; padding: 6px 10px; border: 1px solid #d0d7de; border-radius: 8px; background: #fff; }
+  .followup-form button { font: inherit; font-size: 13px; padding: 6px 14px; border: 1px solid #d0d7de; border-radius: 8px; background: #fff; color: #1f2328; cursor: pointer; }
+  .followup-form button:hover:not(:disabled) { background: #f6f8fa; }
+  .followup-form input:disabled, .followup-form button:disabled { opacity: .5; cursor: not-allowed; }
   .loading { font-size: 13px; color: #57606a; }
   .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #d0d7de; border-top-color: #1f6feb; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -132,6 +141,10 @@
     .loading, .meta, .cat, .dim, summary, header p { color: #8b949e; }
     .retry { background: #21262d; border-color: #30363d; color: #e6edf3; }
     .retry:hover { background: #30363d; }
+    .followup { border-top-color: #30363d; }
+    .followup-a { color: #e6edf3; }
+    .followup-form input, .followup-form button { background: #21262d; border-color: #30363d; color: #e6edf3; }
+    .followup-form button:hover:not(:disabled) { background: #30363d; }
     .pill.green { background: #12261a; color: #3fb950; }
     .pill.amber { background: #2d2418; color: #d29922; }
     .pill.red { background: #39251e; color: #f85149; }
@@ -215,6 +228,7 @@ function scoreClass(v) { return v >= 4 ? 'green' : v === 3 ? 'amber' : 'red'; }
 const WIN_META = { a: ['A 更优', 'tag-a'], b: ['B 更优', 'tag-b'], tie: ['平局', 'tie'] };
 let modelNames = {};
 let tabState = {};
+let currentEvalId = null;
 const TIMEOUT_DEFAULT = 180;
 
 const timeoutEl = $('timeout');
@@ -340,6 +354,7 @@ function renderResult(modelId, data) {
     t.setBadge('<span class="badge pill tie">非结构化</span>');
     t.setContent(`<div class="rationale">${escapeHtml(data.raw)}</div>`);
   }
+  t.panel.appendChild(followupArea(modelId, data.followups));
 }
 
 function renderError(modelId, data) {
@@ -349,6 +364,84 @@ function renderError(modelId, data) {
   t.setContent(`<div class="error-msg">${escapeHtml(data.error)}</div>
     <button class="retry">重试</button>`);
   t.panel.querySelector('.retry').onclick = () => retryOne(modelId);
+  t.panel.appendChild(followupArea(modelId, data.followups));
+}
+
+function followupArea(modelId, existing) {
+  const box = document.createElement('div');
+  box.className = 'followup';
+  const list = document.createElement('div');
+  list.className = 'followup-list';
+  for (const f of existing || []) {
+    const item = document.createElement('div');
+    item.className = 'followup-item';
+    const q = document.createElement('div');
+    q.className = 'followup-q';
+    q.textContent = '追问：' + f.question;
+    const a = document.createElement('div');
+    a.className = 'followup-a';
+    a.textContent = '回答：' + f.answer;
+    item.append(q, a);
+    list.appendChild(item);
+  }
+  const form = document.createElement('div');
+  form.className = 'followup-form';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = '输入追问…';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = '追问';
+  if (!currentEvalId) { input.disabled = true; btn.disabled = true; }
+  const run = () => askFollowup(modelId, input, btn, list);
+  btn.onclick = run;
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
+  form.append(input, btn);
+  box.append(list, form);
+  return box;
+}
+
+async function askFollowup(modelId, input, btn, list) {
+  const text = input.value.trim();
+  if (!text || !currentEvalId) return;
+  input.disabled = true;
+  btn.disabled = true;
+  const item = document.createElement('div');
+  item.className = 'followup-item';
+  const q = document.createElement('div');
+  q.className = 'followup-q';
+  q.textContent = '追问：' + text;
+  const a = document.createElement('div');
+  a.className = 'followup-a';
+  a.innerHTML = '<span class="spinner"></span>追问中…';
+  item.append(q, a);
+  list.appendChild(item);
+  try {
+    const resp = await fetch('/api/followup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eval_id: currentEvalId, model_id: modelId, followup: text, timeout: parseInt($('timeout').value, 10) }),
+    });
+    const d = await resp.json();
+    if (d.ok) {
+      a.textContent = '回答：' + d.answer;
+      input.value = '';
+    } else {
+      a.innerHTML = '<span class="error-msg">' + escapeHtml(d.error || '追问失败') + '</span>';
+    }
+  } catch (e) {
+    a.innerHTML = '<span class="error-msg">' + escapeHtml(String(e)) + '</span>';
+  } finally {
+    if (currentEvalId) { input.disabled = false; btn.disabled = false; }
+  }
+}
+
+function enableFollowups() {
+  for (const t of Object.values(tabState)) {
+    const input = t.panel.querySelector('.followup-form input');
+    const btn = t.panel.querySelector('.followup-form button');
+    if (input && btn) { input.disabled = false; btn.disabled = false; }
+  }
 }
 
 function retryOne(modelId) {
@@ -407,6 +500,7 @@ $('submit').onclick = async () => {
   tabsEl.innerHTML = '';
   panelsEl.innerHTML = '';
   tabState = {};
+  currentEvalId = null;
 
   const qa = addTab('问题与答案', false);
   qa.setContent(`<h3>问题</h3><div class="qa">${escapeHtml(question)}</div>
@@ -437,7 +531,14 @@ $('submit').onclick = async () => {
         for (const line of event.split('\n')) {
           if (!line.startsWith('data: ')) continue;
           const data = JSON.parse(line.slice(6));
-          if (data.ok) renderResult(data.model, data); else renderError(data.model, data);
+          if (data.type === 'saved') {
+            currentEvalId = data.eval_id;
+            enableFollowups();
+          } else if (data.ok) {
+            renderResult(data.model, data);
+          } else {
+            renderError(data.model, data);
+          }
         }
       }
     }
@@ -508,6 +609,7 @@ async function viewRecord(id) {
   tabsEl.innerHTML = '';
   panelsEl.innerHTML = '';
   tabState = {};
+  currentEvalId = rec.id;
   const qa = addTab('问题与答案', false);
   qa.setContent(`<h3>问题</h3><div class="qa">${escapeHtml(rec.question)}</div>
     <h3>答案 A</h3><div class="qa">${escapeHtml(rec.answer_a)}</div>
@@ -530,6 +632,7 @@ function backToList() {
   tabsEl.innerHTML = '';
   panelsEl.innerHTML = '';
   tabState = {};
+  currentEvalId = null;
   loadHistory(0);
 }
 

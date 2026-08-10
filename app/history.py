@@ -2,6 +2,7 @@
 import json
 import sqlite3
 from contextlib import closing
+from datetime import datetime
 from pathlib import Path
 
 from .config import config
@@ -117,3 +118,28 @@ def delete_evaluation(eval_id: int) -> bool:
     with closing(get_db()) as conn, conn:
         cur = conn.execute("DELETE FROM evaluations WHERE id = ?", (eval_id,))
         return cur.rowcount > 0
+
+
+def add_followup(eval_id: int, model_id: str, question: str, answer: str) -> bool:
+    """Append a follow-up Q&A to one model's result. Returns False if the record/model is not found."""
+    with closing(get_db()) as conn, conn:
+        row = conn.execute("SELECT results FROM evaluations WHERE id = ?", (eval_id,)).fetchone()
+        if row is None:
+            return False
+        results = json.loads(row["results"])
+        for r in results:
+            if isinstance(r, dict) and r.get("model") == model_id:
+                followups = r.setdefault("followups", [])
+                followups.append(
+                    {
+                        "question": question,
+                        "answer": answer,
+                        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+                )
+                conn.execute(
+                    "UPDATE evaluations SET results = ? WHERE id = ?",
+                    (json.dumps(results, ensure_ascii=False), eval_id),
+                )
+                return True
+        return False

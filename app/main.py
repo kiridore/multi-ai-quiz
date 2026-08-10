@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from .config import ACCESS_KEY, BASE_DIR, SESSION_TOKEN, config
 from .gateway import evaluate_one, family_for, fetch_live_models, fill_prompt, probe_model, provider_for
-from .history import add_evaluation, delete_evaluation, get_evaluation, init_db, list_evaluations
+from .history import add_evaluation, add_followup, delete_evaluation, get_evaluation, init_db, list_evaluations
 
 app = FastAPI(title="multi-ai-quiz")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -169,10 +169,17 @@ async def evaluate(body: EvaluateRequest):
                 yield f"data: {json.dumps(result, ensure_ascii=False)}\n\n"
         finally:
             if saved:
+                eval_id = None
                 try:
-                    add_evaluation(question, answer_a, answer_b, prompt_template, model_ids, saved)
+                    eval_id = add_evaluation(question, answer_a, answer_b, prompt_template, model_ids, saved)
                 except Exception as exc:
                     print(f"[history] 保存失败: {exc}", flush=True)
+                if eval_id is not None:
+                    # 客户端断开时 GeneratorExit 会使 finally 中的 yield 失败，忽略即可
+                    try:
+                        yield f"data: {json.dumps({'type': 'saved', 'eval_id': eval_id}, ensure_ascii=False)}\n\n"
+                    except (GeneratorExit, RuntimeError):
+                        pass
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -184,6 +191,36 @@ async def evaluate_one_model(body: EvaluateRequest):
         raise HTTPException(status_code=400, detail="该接口一次只接受一个模型")
     m = meta[model_ids[0]]
     return await evaluate_one(model_ids[0], filled, m["api"], m["temperature"], body.timeout)
+
+
+class FollowupRequest(BaseModel):
+    eval_id: int
+    model_id: str
+    followup: str
+    timeout: float | None = None
+
+
+@app.post("/api/followup")
+async def followup(body: FollowupRequest):
+    """追问：基于历史评审记录，对该模型的上一轮回答追加一次对话，并写回历史。"""
+    question = body.followup.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="追问内容不能为空")
+    record = get_evaluation(body.eval_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="评审记录不存在")
+    item = next((r for r in record["results"] if isinstance(r, dict) and r.get("model") == body.model_id), None)
+    if item is None:
+        raise HTTPException(status_code=404, detail="该评审中无此模型")
+    filled = fill_prompt(record["prompt"], record["question"], record["answer_a"], record["answer_b"])
+    prev = item.get("raw")
+    prompt = f"{filled}\n\n你上一轮的回答：\n{prev}" if prev else filled
+    prompt = f"{prompt}\n\n用户追问：\n{question}"
+    resp = await evaluate_one(body.model_id, prompt, item.get("api"), None, body.timeout)
+    if not resp.get("ok"):
+        return {"ok": False, "error": resp.get("error", "调用失败")}
+    add_followup(body.eval_id, body.model_id, question, resp["raw"])
+    return {"ok": True, "answer": resp["raw"]}
 
 
 @app.get("/api/history")
