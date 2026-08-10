@@ -275,6 +275,30 @@ function addTab(label, pending) {
   return { tab, panel, setBadge, setContent, activate };
 }
 
+// 勾选模型持久化（localStorage，刷新后恢复）
+const MODEL_SEL_KEY = 'quiz_selected_models';
+
+function saveSelection() {
+  const ids = [...document.querySelectorAll('#models input:checked')].map((i) => i.value);
+  try { localStorage.setItem(MODEL_SEL_KEY, JSON.stringify(ids)); } catch (e) { /* 存储不可用则忽略 */ }
+}
+
+function applySavedSelection() {
+  try {
+    const raw = localStorage.getItem(MODEL_SEL_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    const savedSet = new Set(saved);
+    for (const input of document.querySelectorAll('#models input')) {
+      input.checked = savedSet.has(input.value);
+    }
+  } catch (e) { /* 损坏数据忽略，使用默认勾选 */ }
+}
+
+$('models').addEventListener('change', (e) => {
+  if (e.target.matches('input[type="checkbox"]')) saveSelection();
+});
+
 async function loadMeta() {
   const [models, prompt] = await Promise.all([
     fetch('/api/models').then(r => r.json()),
@@ -307,6 +331,7 @@ async function loadMeta() {
     }
     box.appendChild(col);
   }
+  applySavedSelection();
 }
 
 function verdictClass(winner) { return (WIN_META[winner] || [null, 'tie'])[1]; }

@@ -29,7 +29,7 @@ models:
     api: chat
     temperature: 1
     price: "$3.00/$15.00"
-    enabled: true
+    enabled: false
   - id: hy3
     name: Hy3
     api: chat
