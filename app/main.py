@@ -63,6 +63,7 @@ class EvaluateRequest(BaseModel):
     answer_b: str
     models: list[str] | None = None
     prompt: str | None = None
+    timeout: float | None = None  # 秒；None 时用默认 180s
 
 
 async def all_models() -> list[dict]:
@@ -128,6 +129,8 @@ async def _validate(body: EvaluateRequest) -> tuple[str, list[str], dict[str, di
         raise HTTPException(status_code=400, detail=f"未知模型: {sorted(unknown)}")
     if not model_ids:
         raise HTTPException(status_code=400, detail="未选择任何模型")
+    if body.timeout is not None and not (1 <= body.timeout <= 3600):
+        raise HTTPException(status_code=400, detail="timeout 需在 1-3600 秒之间")
     filled = fill_prompt(body.prompt or config.default_prompt, question, answer_a, answer_b)
     return filled, model_ids, valid
 
@@ -150,7 +153,7 @@ async def evaluate(body: EvaluateRequest):
 
     async def worker(model_id: str) -> None:
         m = meta[model_id]
-        await queue.put(await evaluate_one(model_id, filled, m["api"], m["temperature"]))
+        await queue.put(await evaluate_one(model_id, filled, m["api"], m["temperature"], body.timeout))
 
     tasks = [asyncio.create_task(worker(m)) for m in model_ids]
     remaining = len(tasks)
@@ -180,7 +183,7 @@ async def evaluate_one_model(body: EvaluateRequest):
     if len(model_ids) != 1:
         raise HTTPException(status_code=400, detail="该接口一次只接受一个模型")
     m = meta[model_ids[0]]
-    return await evaluate_one(model_ids[0], filled, m["api"], m["temperature"])
+    return await evaluate_one(model_ids[0], filled, m["api"], m["temperature"], body.timeout)
 
 
 @app.get("/api/history")

@@ -50,6 +50,10 @@
   .tabs:empty { display: none; }
   .tabpanels:empty { display: none; }
   .actions { display: flex; gap: 10px; margin-top: 14px; align-items: center; }
+  .timeout-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .timeout-row label { margin: 0; }
+  #timeout { width: 110px; padding: 5px 8px; font: inherit; border: 1px solid #d0d7de; border-radius: 8px; background: #fff; }
+  .hint { font-size: 12px; color: #57606a; }
   #submit { background: #1f6feb; color: #fff; border: none; padding: 9px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; }
   #submit:disabled, #check:disabled { opacity: .5; cursor: not-allowed; }
   #check { background: #fff; border: 1px solid #d0d7de; color: #1f2328; padding: 9px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; }
@@ -118,6 +122,8 @@
     #models-toggle:hover { background: #30363d; }
     #check { background: #21262d; border-color: #30363d; color: #e6edf3; }
     #check:hover { background: #30363d; }
+    #timeout { background: #0d1117; color: #e6edf3; border-color: #30363d; }
+    .hint { color: #8b949e; }
     .tab { color: #8b949e; }
     .tab:hover { background: #30363d; }
     .tab.active { color: #e6edf3; }
@@ -172,6 +178,11 @@
         <button id="models-toggle" type="button">折叠</button>
       </div>
       <div class="providers" id="models"></div>
+      <div class="timeout-row">
+        <label for="timeout">模型超时（秒）</label>
+        <input type="number" id="timeout" min="1" max="3600" step="1">
+        <span class="hint">单个模型超过该时长未响应即判定失败</span>
+      </div>
       <div class="actions">
         <button id="submit">开始评审</button>
         <button id="check">检测模型可用性</button>
@@ -204,6 +215,15 @@ function scoreClass(v) { return v >= 4 ? 'green' : v === 3 ? 'amber' : 'red'; }
 const WIN_META = { a: ['A 更优', 'tag-a'], b: ['B 更优', 'tag-b'], tie: ['平局', 'tie'] };
 let modelNames = {};
 let tabState = {};
+const TIMEOUT_DEFAULT = 180;
+
+const timeoutEl = $('timeout');
+timeoutEl.value = localStorage.getItem('quiz_timeout') || TIMEOUT_DEFAULT;
+timeoutEl.addEventListener('change', () => {
+  const t = parseInt(timeoutEl.value, 10);
+  timeoutEl.value = Number.isFinite(t) && t >= 1 ? t : TIMEOUT_DEFAULT;
+  localStorage.setItem('quiz_timeout', timeoutEl.value);
+});
 
 // 会话失效时跳转登录页
 const _origFetch = window.fetch.bind(window);
@@ -336,7 +356,7 @@ function retryOne(modelId) {
   if (!t) return;
   t.setBadge('<span class="spinner"></span>');
   t.setContent('<div class="loading"><span class="spinner"></span>重试中…</div>');
-  const body = { question: $('question').value, answer_a: $('answer_a').value, answer_b: $('answer_b').value, models: [modelId], prompt: $('prompt').value };
+  const body = { question: $('question').value, answer_a: $('answer_a').value, answer_b: $('answer_b').value, models: [modelId], prompt: $('prompt').value, timeout: parseInt($('timeout').value, 10) };
   fetch('/api/evaluate/one', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     .then(r => r.json())
     .then(d => d.ok ? renderResult(modelId, d) : renderError(modelId, d))
@@ -395,7 +415,7 @@ $('submit').onclick = async () => {
   for (const m of selected) tabState[m] = addTab(modelNames[m] || m, true);
   tabState[selected[0]].activate();
 
-  const body = { question, answer_a: answerA, answer_b: answerB, models: selected, prompt: $('prompt').value };
+  const body = { question, answer_a: answerA, answer_b: answerB, models: selected, prompt: $('prompt').value, timeout: parseInt($('timeout').value, 10) };
   $('submit').disabled = true;
   try {
     const resp = await fetch('/api/evaluate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });

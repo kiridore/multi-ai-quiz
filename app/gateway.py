@@ -14,7 +14,8 @@ import httpx
 
 from .config import config
 
-TIMEOUT = httpx.Timeout(60.0)
+DEFAULT_TIMEOUT = 180.0  # 秒；网页设置项未传时使用
+TIMEOUT = httpx.Timeout(DEFAULT_TIMEOUT)
 ANTHROPIC_VERSION = "2023-06-01"
 
 
@@ -156,14 +157,17 @@ async def probe_model(model_id: str, api: str | None = None, temperature: float 
         return {"model": model_id, "ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
-async def evaluate_one(model_id: str, prompt: str, api: str | None = None, temperature: float | None = None) -> dict[str, Any]:
+async def evaluate_one(
+    model_id: str, prompt: str, api: str | None = None, temperature: float | None = None, timeout: float | None = None
+) -> dict[str, Any]:
     """Call one model. Returns {model, api, ok, result|raw|error}. Retries once on 5xx."""
     api = api or family_for(model_id)
     handler = _HANDLERS.get(api, _chat_completions)
+    client_timeout = httpx.Timeout(timeout) if timeout else TIMEOUT
     last_exc: Exception | None = None
     for attempt in range(2):
         try:
-            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            async with httpx.AsyncClient(timeout=client_timeout) as client:
                 content = await handler(client, model_id, prompt, temperature) if api == "chat" else await handler(client, model_id, prompt)
             parsed = parse_json(content)
             return {"model": model_id, "api": api, "ok": True, "raw": content, "result": parsed}
