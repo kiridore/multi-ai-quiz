@@ -226,8 +226,8 @@ async def followup(body: FollowupRequest):
 
 
 @app.get("/api/history")
-async def history_list(limit: int = 20, offset: int = 0) -> dict:
-    items, total = list_evaluations(limit=limit, offset=offset)
+async def history_list(limit: int = 20, offset: int = 0, q: str = "") -> dict:
+    items, total = list_evaluations(limit=limit, offset=offset, q=q)
     return {"items": items, "total": total}
 
 

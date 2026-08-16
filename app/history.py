@@ -33,6 +33,11 @@ def init_db() -> None:
         conn.execute(_SCHEMA)
 
 
+def _escape_like(s: str) -> str:
+    """转义 LIKE 通配符，使搜索词按字面匹配。"""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _winners_summary(results: list) -> dict:
     """Bucket per-model results into a/b/tie/fail/other counts."""
     summary = {"a": 0, "b": 0, "tie": 0, "fail": 0, "other": 0}
@@ -69,14 +74,26 @@ def add_evaluation(question: str, answer_a: str, answer_b: str, prompt: str, mod
         return int(rowid)
 
 
-def list_evaluations(limit: int = 20, offset: int = 0) -> tuple[list[dict], int]:
+def list_evaluations(limit: int = 20, offset: int = 0, q: str | None = None) -> tuple[list[dict], int]:
     limit = max(1, min(200, limit))
     offset = max(0, offset)
+    q = (q or "").strip()
+    where = ""
+    params: list = []
+    if q:
+        like = f"%{_escape_like(q)}%"
+        where = (
+            " WHERE question LIKE ? ESCAPE '\\'"
+            " OR answer_a LIKE ? ESCAPE '\\'"
+            " OR answer_b LIKE ? ESCAPE '\\'"
+            " OR models LIKE ? ESCAPE '\\'"
+        )
+        params = [like, like, like, like]
     with closing(get_db()) as conn:
-        total = conn.execute("SELECT COUNT(*) FROM evaluations").fetchone()[0]
+        total = conn.execute(f"SELECT COUNT(*) FROM evaluations{where}", params).fetchone()[0]
         rows = conn.execute(
-            "SELECT id, created_at, question, models, results FROM evaluations ORDER BY id DESC LIMIT ? OFFSET ?",
-            (limit, offset),
+            f"SELECT id, created_at, question, models, results FROM evaluations{where} ORDER BY id DESC LIMIT ? OFFSET ?",
+            (*params, limit, offset),
         ).fetchall()
     items = []
     for row in rows:
